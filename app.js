@@ -1,6 +1,7 @@
 /* Lesson Board — student pages.
  * Each group folder has an index.html that sets window.LESSON_GROUP and loads this file.
- * The lessons come from the Google Sheet through the Apps Script feed (config.js).
+ * The lessons come from feeds/<group>.json on this site (published by the board on every save),
+ * or, if that file is missing or not from today, from the Google Sheet through the Apps Script feed (config.js).
  * ?present opens the projector view · ?demo uses the local preview data.
  */
 (function () {
@@ -59,7 +60,31 @@
     });
   }
 
+  /** Spain's date, whatever the device's time zone ("2026-10-08"). */
+  function todayMadrid() {
+    if (params.get('today')) return params.get('today');
+    try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date()); } catch (e) { return today(); }
+  }
+
+  /** The published copy on this site: fast. Accepted only if it was made today. */
+  function fetchPublished() {
+    var minute = Math.floor(Date.now() / 60000);          // a fresh copy at most once a minute
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 8000) : null;
+    return fetch('../feeds/' + encodeURIComponent(GROUP) + '.json?m=' + minute, ctrl ? { signal: ctrl.signal } : {})
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (feed) {
+        if (timer) clearTimeout(timer);
+        if (!feed || feed.error || feed.today !== todayMadrid()) throw new Error('Published copy is not from today');
+        return feed;
+      }, function (err) { if (timer) clearTimeout(timer); throw err; });
+  }
+
   function fetchFeed() {
+    return fetchPublished().catch(function () { return fetchGoogle(); });
+  }
+
+  function fetchGoogle() {
     var url = (window.LESSONS_CONFIG || {}).feedUrl;
     if (!url) return Promise.reject(new Error('The feed address is missing in config.js.'));
     var full = url + (url.indexOf('?') < 0 ? '?' : '&') + 'feed=' + encodeURIComponent(GROUP);
@@ -109,7 +134,8 @@
     var link = safeUrl(b.link) ? '<a class="linkbtn" href="' + esc(b.link) + '" target="_blank" rel="noopener">' + ICON.link +
       '<span>' + esc(b.linkLabel || 'Open') + '</span></a>' : '';
     var deco = b.kind === 'brainbreak' ? '🧠 ' : /^review\b/i.test(b.title || '') ? '👀 ' : '';
-    var title = b.title ? '<div class="blk-title">' + deco + esc(b.title) + '</div>' : '';
+    var chip = b.book ? '<span class="book" title="From the book">📖 ' + esc(b.book) + '</span>' : '';
+    var title = b.title || chip ? '<div class="blk-title">' + chip + deco + esc(b.title || '') + '</div>' : '';
     var img = b.image ? '<img class="blk-img" src="' + esc(b.image) + '" alt="' + esc(b.title || '') + '" loading="lazy">' : '';
     var inner = (b.continued ? '<div class="cont">Continued from last session</div>' : '') +
       (b.kind === 'image' ? img + title : title + img) +
@@ -128,7 +154,7 @@
     return '<div class="gframe"><div><h2>Goals</h2>' +
       (h.goals.length ? '<ul>' + h.goals.map(function (g) { return '<li>' + esc(g.text) + '</li>'; }).join('') + '</ul>' : '<p style="text-align:center;color:var(--ink-3)">—</p>') +
       '</div><div><h2>Activities</h2><ul class="acts"><li>Warm up &amp; Review</li>' +
-      h.activities.map(function (a) { return '<li>' + esc(a.text) + '</li>'; }).join('') + '<li>Wrap up</li></ul></div></div>';
+      h.activities.map(function (a) { return '<li>' + (a.book ? '<span class="book">' + esc(a.book) + '</span>' : '') + esc(a.text) + '</li>'; }).join('') + '<li>Wrap up</li></ul></div></div>';
   }
 
   function grouped(s) {
