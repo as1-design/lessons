@@ -80,10 +80,6 @@
       }, function (err) { if (timer) clearTimeout(timer); throw err; });
   }
 
-  function fetchFeed() {
-    return fetchPublished().catch(function () { return fetchGoogle(); });
-  }
-
   function fetchGoogle() {
     var url = (window.LESSONS_CONFIG || {}).feedUrl;
     if (!url) return Promise.reject(new Error('The feed address is missing in config.js.'));
@@ -100,21 +96,54 @@
     });
   }
 
-  function start() {
-    var cached = null;
-    try { cached = JSON.parse(localStorage.getItem(CACHE_KEY)); } catch (e) {}
-    if (cached && !DEMO) show(cached);
-    (DEMO ? fetchDemo() : fetchFeed()).then(function (feed) {
-      if (feed.error) throw new Error(feed.error);
-      if (!DEMO) try { localStorage.setItem(CACHE_KEY, JSON.stringify(feed)); } catch (e) {}
-      show(feed);
-    }).catch(function (err) {
-      if (window.console) console.error(err);
-      if (!state.feed || !document.querySelector('.page')) {
+  /** Same lessons? (the time a copy was made doesn't count) */
+  function sameContent(a, b) {
+    if (!a || !b) return false;
+    var x = Object.assign({}, a), y = Object.assign({}, b);
+    delete x.generated; delete y.generated;
+    return JSON.stringify(x) === JSON.stringify(y);
+  }
+
+  /** Shows a newer version of the lessons, keeping the lesson and the place the student is reading. */
+  function update(feed) {
+    if (!feed || feed.error || sameContent(feed, state.feed)) return;
+    if (state.present && state.feed) return;                 // never jump while projecting
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(feed)); } catch (e) {}
+    // A lesson the student picked (in the address, #s12) stays open; otherwise the newest one shows, as on arrival.
+    var picked = location.hash.slice(1), y = window.scrollY, before = state.current && state.current.anchor;
+    show(feed);
+    if (picked || (state.current && state.current.anchor === before)) window.scrollTo(0, y);
+  }
+
+  /**
+   * The fast copy on this site first; Google's copy is checked at the same time in the background,
+   * because it has your very latest changes (the site copy can be a few minutes behind).
+   */
+  function refresh(firstTime) {
+    var latest = false, problem = null;
+    var site = fetchPublished().then(function (f) { if (!latest) update(f); }, function (err) { problem = err; });
+    var google = fetchGoogle().then(function (f) {
+      if (f.error) throw new Error(f.error);
+      latest = true; update(f);
+    }, function (err) { problem = problem || err; });
+    return Promise.all([site, google]).then(function () {
+      if (firstTime && !state.feed) {
+        if (window.console && problem) console.error(problem);
         document.getElementById('app').innerHTML = '<div class="msg"><p>The lessons could not be loaded just now.</p>' +
-          '<p style="font-size:13px;color:var(--ink-3)">' + esc(err.message) + '</p><button class="ibtn" onclick="location.reload()">Try again</button></div>';
+          '<p style="font-size:13px;color:var(--ink-3)">' + esc(problem ? problem.message : '') + '</p><button class="ibtn" onclick="location.reload()">Try again</button></div>';
       }
     });
+  }
+
+  function start() {
+    if (DEMO) {
+      fetchDemo().then(show).catch(function (err) { document.getElementById('app').innerHTML = '<div class="msg"><p>' + esc(err.message) + '</p></div>'; });
+      return;
+    }
+    var cached = null;
+    try { cached = JSON.parse(localStorage.getItem(CACHE_KEY)); } catch (e) {}
+    if (cached) show(cached);
+    refresh(true);
   }
 
   function show(feed) {
@@ -297,7 +326,12 @@
   window.addEventListener('resize', function () { if (state.present) openPresent(); });
 
   // Refresh quietly when the page is open for a long time (e.g. projected all afternoon).
-  setInterval(function () { if (!state.present && document.visibilityState === 'visible' && !DEMO) fetchFeed().then(function (f) { if (!f.error) { var h = state.current && state.current.anchor; show(f); if (h) location.hash = h; } }).catch(function () {}); }, 5 * 60 * 1000);
+  // An open page checks for changes every 5 minutes, and whenever the student comes back to it.
+  setInterval(function () { if (!state.present && document.visibilityState === 'visible' && !DEMO) refresh(false); }, 5 * 60 * 1000);
+  var lastCheck = Date.now();
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && !DEMO && !state.present && Date.now() - lastCheck > 60000) { lastCheck = Date.now(); refresh(false); }
+  });
 
   start();
 })();
