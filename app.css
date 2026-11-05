@@ -68,6 +68,13 @@ main { max-width: 820px; margin: 18px auto 40px; padding: 0 16px; }
 .gframe li { margin: 4px 0; }
 .gframe .acts { list-style: none; padding: 0; text-align: center; }
 .gframe .acts li { margin: 7px 0; font-size: 16px; }
+/* A lesson that is still a plan (today before it's marked, or published early) */
+.planbar { margin: 14px 22px 0; padding: 10px 14px; border-radius: 12px; border: 2px dashed #e0a43a; background: #fff6e6; color: #7a4a00; font-size: 15px; text-align: center; }
+.page.is-plan { outline: 3px dashed #e0a43a; outline-offset: -3px; }
+.plantag { font-style: normal; font-size: 11px; font-weight: 700; color: #9a5b00; background: #fff1d6; border-radius: 6px; padding: 1px 6px; margin-left: 4px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .planbar { background: #3a2a10; color: #ffd591; border-color: #b9822b; } :root:not([data-theme="light"]) .plantag { background: #3a2a10; color: #ffd591; } }
+:root[data-theme="dark"] .planbar { background: #3a2a10; color: #ffd591; border-color: #b9822b; }
+:root[data-theme="dark"] .plantag { background: #3a2a10; color: #ffd591; }
 .book { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .2px; padding: 1px 8px; border-radius: 6px; background: var(--chip); color: var(--chip-ink); vertical-align: 2px; margin-right: 6px; white-space: nowrap; }
 .gframe .acts .book { font-size: 11px; padding: 0 6px; }
 .present .book { font-size: .6em; vertical-align: .2em; }

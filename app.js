@@ -153,7 +153,9 @@
     var want = location.hash.slice(1);
     var list = feed.sessions;
     var found = list.filter(function (s) { return s.anchor === want; })[0];
-    state.current = found || list[list.length - 1] || null;   // the newest: today's class, or this week's online work
+    // Otherwise the newest one up to today (today's class or this week's online work), not one published early.
+    var upToToday = list.filter(function (s) { return !feed.today || s.date <= feed.today; });
+    state.current = found || upToToday[upToToday.length - 1] || list[0] || null;
     render();
   }
 
@@ -209,10 +211,11 @@
       app.innerHTML = bar + '<main><div class="msg">No lessons yet — they appear here on the day of each class.</div></main>';
       return;
     }
-    var page = '<article class="page"><div class="pg-group">' + esc(s.label) +
+    var page = '<article class="page' + (s.plan ? ' is-plan' : '') + '"><div class="pg-group">' + esc(s.label) +
       '<span>' + esc(fmtDate(s.date, true)) + (s.unit ? ' · ' + esc(s.unit) : '') + '</span></div>' +
       '<div class="banner' + (s.cancelled ? ' off' : '') + '"><h1>' + (s.cancelled ? 'No class<br>today' : s.kind === 'online' ? 'This week<br>online' : 'Today’s lesson<br>plan') + '</h1></div>' +
-      (s.test ? '<div class="testbar">📝 ' + esc(s.test) + ' today</div>' : '') +
+      (s.plan ? '<div class="planbar">' + planText(s, feed) + '</div>' : '') +
+      (s.test ? '<div class="testbar">📝 ' + esc(s.test) + (s.date === feed.today ? ' today' : ' · ' + esc(fmtDate(s.date, true))) + '</div>' : '') +
       (s.cancelled ? '<div class="nocl">' + (s.message ? esc(s.message).replace(/\n/g, '<br>') : 'This class won’t take place. See you next time!') + '</div>'
         : s.kind === 'f2f' ? headerHtml(s) : '');
     grouped(s).forEach(function (g) {
@@ -225,12 +228,20 @@
     var archive = '<nav class="archive"><h3>All sessions</h3><ul>' + list.slice().reverse().map(function (x) {
       var first = x.cancelled ? { text: 'No class' } : x.test ? { text: '📝 ' + x.test } : x.header.activities[0] || x.blocks.filter(function (b) { return b.title; })[0];
       return '<li><a href="#' + x.anchor + '"' + (x === s ? ' class="on"' : '') + '><span><b>' + esc(x.label) + '</b>' +
+        (x.plan ? ' <em class="plantag">' + (x.kind === 'online' ? 'coming up' : x.date === feed.today ? 'today’s plan' : 'plan') + '</em>' : '') +
         (first ? '<div class="tagline">' + esc(first.text || first.title) + '</div>' : '') + '</span><small>' + esc(fmtDate(x.date)) + '</small></a></li>';
     }).join('') + '</ul></nav>';
 
     app.innerHTML = bar + '<main>' + page + archive + '<p class="foot">Updated ' +
       esc(new Date(feed.generated).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</p></main>';
     if (state.present) openPresent();
+  }
+
+  /** The banner on a lesson that is still a plan (or an online week shown before it goes live). */
+  function planText(s, feed) {
+    if (s.kind === 'online') return '<b>Coming up</b> · this online week starts on ' + esc(fmtDate(s.date, true)) + '. It may still change.';
+    if (s.date === feed.today) return '<b>Today’s plan</b> · it may change in class.';
+    return '<b>Plan for ' + esc(fmtDate(s.date, true)) + '</b> · it may change before or during the class.';
   }
 
   // ---------------------------------------------------------------- projector mode
